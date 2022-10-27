@@ -12,13 +12,31 @@ public class ServerThread implements Runnable {
 
     @Override
     public void run(){
-        while(true){
-            try{
+        boolean exit = false;
+        try{
+        while(!exit){
                 ObjectInputStream in = new ObjectInputStream(client.getInputStream());
                 Message msg = (Message)in.readObject();
-                System.out.println(msg.getContent());
-            }catch(Exception e){
-                System.out.println("Server Thread Error!");
+                if(msg.getContent().equals("exit")){
+                    exit = true;
+                }
+                else{
+                    System.out.println(msg.getUserName()+":"+msg.getContent());
+                }
+        }
+        }catch(Exception e){
+            // do nothing
+        }finally{
+            closeSilently(client);
+        }
+    }
+
+    public void closeSilently(Socket s){
+        if(s!=null){
+            try{
+                s.close();
+            }catch(IOException e){
+                // do nothing
             }
         }
     }

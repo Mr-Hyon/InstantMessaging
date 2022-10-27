@@ -24,7 +24,7 @@ class Client{
                 exit = true;
             }
             else{
-                Message msg = new Message(content);
+                Message msg = new Message(username,content);
                 sendMessage(socket, msg);
             }
         }

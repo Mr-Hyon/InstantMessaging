@@ -19,11 +19,21 @@ public class ServerThread implements Runnable {
         }
     }
 
+    public String getHostName(){
+        return client.getRemoteSocketAddress().toString().split(":")[0].substring(1);
+    }
+
+    public int getPort(){
+        return Integer.parseInt(client.getRemoteSocketAddress().toString().split(":")[1]);
+    }
+
     public void sendUserList(){
-        out.println("User List:");
-        synchronized(Server.user_list){
+        out.println("User List");
+        synchronized(Server.status){
             for(String username: Server.user_list){
-                out.println(username);
+                if(Server.status.getOrDefault(username, "offline").equals("idle")){
+                    out.println(username+" "+Server.client_address.get(username));
+                }
             }
             out.println("/over");
         }
@@ -35,7 +45,12 @@ public class ServerThread implements Runnable {
         try{
         while(!exit){
                 String input = in.readLine();
-                username = input.split("\\|")[0];
+                if(username == null){
+                    username = input.split("\\|")[0];
+                    synchronized(Server.client_address){
+                        Server.client_address.put(username, client.getRemoteSocketAddress().toString().substring(1));
+                    }
+                }
                 String content = input.split("\\|")[1];
                 if(content.equals("/login")){
                     System.out.println("Received Login Request from "+username);
@@ -46,7 +61,10 @@ public class ServerThread implements Runnable {
                         file.mkdirs();
                     }
                     if(isLegit){
-                        out.println("success");
+                        synchronized(Server.status){
+                            Server.status.put(username, "idle");
+                            out.println("success");
+                        }
                     }
                     continue;
                 }
@@ -57,13 +75,16 @@ public class ServerThread implements Runnable {
                 else if(content.equals("/exit")){
                     exit = true;
                     System.out.println(username+" ended connection to server");
+                    Server.status.put(username, "offline");
                 }
                 else{
                     System.out.println(username+":"+content);
                 }
         }
         }catch(Exception e){
+            //e.printStackTrace();
             System.out.println(username+" ended connection to server");
+            Server.status.put(username, "offline");
         }finally{
             closeSilently(client);
         }

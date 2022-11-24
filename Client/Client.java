@@ -1,18 +1,27 @@
 import java.net.*;
 import java.util.*;
+
+import javax.swing.text.html.HTMLDocument.HTMLReader.IsindexAction;
+
 import java.io.*;
 
 class Client{
 
     public static String username;
     public static int ServerPort = 8080;
-    public static Socket socket;
+    public static boolean isIdle = true;
+    public static Socket socket = null; // this socket is between client and server
+    public static Socket chatSocket = null; // this socket is between client and client
+    public static String opposed_username = null; // 0 indicates chatSocket is null
     public static BufferedReader in;
     public static PrintWriter out;
     public static String seperator = "|";
+    public static HashMap<String, String> userInfo = new HashMap<>(); // store the ip address of online user
 
     public static void sendMessage(String msg){
-        out.println(username+ seperator +msg);
+        synchronized(out){
+            out.println(username+ seperator +msg);
+        }
     }
 
     public static boolean sendLoginMessage(){
@@ -27,6 +36,30 @@ class Client{
             e.printStackTrace();
         }
         return false;
+    }
+
+    public static void updateUserList(){
+        userInfo = new HashMap<>();
+        synchronized(out){
+            // Caution! Watch out for dead lock!
+            synchronized(in){
+                out.println(username + seperator + "/list");
+                String res;
+                try{
+                    while(!(res = Client.in.readLine()).equals("/over")){
+                        if(res.contains(":")){
+                            userInfo.put(res.split(" ")[0], res.split(" ")[1]);
+                        }
+                    }
+                }catch(IOException e){
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    public static void chatWithClient(){
+
     }
 
     public static void main(String[] args){
@@ -51,10 +84,32 @@ class Client{
         if(!sendLoginMessage()){
             // first time user, need to generate key pair
         }
+        ConnectionListener listener = new ConnectionListener(socket.getLocalAddress().toString().substring(1)+":"+socket.getLocalPort());
+        ChatSessionListener cListener = new ChatSessionListener();
+        new Thread(listener).start();
+        new Thread(cListener).start();
         boolean exit = false;
         while(!exit){
-            System.out.print(">");
             String content = input_reader.nextLine();
+            boolean isInChatSession = false;
+            //synchronized(chatSocket){
+                if(chatSocket!=null)
+                    isInChatSession = true;
+            //}
+            if(isInChatSession){
+                //System.out.println("chat msg");
+                try{
+                    PrintWriter chat_out = new PrintWriter(chatSocket.getOutputStream(), true);
+                    chat_out.println(content);
+                    if(content.equals("/end")){
+                        chat_out.close();
+                        chatSocket = null;
+                    }
+                }catch(IOException e){
+                    // do nothing
+                }
+                continue;
+            }
             if(content.contains(seperator)){
                 System.out.println("Illegal Character!");
                 continue;
@@ -66,14 +121,52 @@ class Client{
                 exit = true;
             }
             if(content.equals("/list")){
-                sendMessage(content);
-                String res;
-                try{
-                    while(!(res = in.readLine()).equals("/over")){
-                        System.out.println(res);
+                userInfo = new HashMap<>();
+                synchronized(out){
+                    synchronized(in){
+                        sendMessage(content);
+                        String res;
+                        try{
+                            while( !(res = in.readLine()).equals("/over")){
+                                System.out.println(res);
+                                userInfo.put(res.split(" ")[0], res.split(" ")[1]);
+                            }
+                        }catch(IOException e){
+                            e.printStackTrace();
+                        }
                     }
-                }catch(IOException e){
-                    e.printStackTrace();
+                }
+            }
+            if(content.startsWith("/chat ")){
+                String target_name = content.split(" ")[1].trim();
+                if(target_name.equals(username)){
+                    System.out.println("Dude, stop talking to yourself");
+                    continue;
+                }
+                if(chatSocket!=null){
+                    System.out.println("You are aleady in chat session!");
+                    continue;
+                }
+                updateUserList();
+                if(userInfo.get(target_name) == null){
+                    System.out.println("User is busy or not exist!");
+                }
+                else{
+                    String ip_address = userInfo.get(target_name);
+                    //synchronized(chatSocket){
+                        try{
+                            System.out.println(ip_address);
+                            String hostname = ip_address.split(":")[0];
+                            int port = Integer.parseInt(ip_address.split(":")[1]);
+                            chatSocket = new Socket(hostname,port);
+                            opposed_username = target_name;
+                            isIdle = false;
+                            PrintWriter chat_out = new PrintWriter(chatSocket.getOutputStream(), true);
+                            chat_out.println(username);
+                        }catch(IOException e){
+                            e.printStackTrace();
+                        }
+                    //}
                 }
             }
             else{

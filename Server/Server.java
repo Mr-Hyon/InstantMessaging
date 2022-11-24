@@ -8,6 +8,7 @@ class Server{
     public static int port=8080;
     public static Set<String> user_list = new HashSet<>();
     public static HashMap<String, String> status = new HashMap<>();
+    public static HashMap<String, String> client_address = new HashMap<>();
 
     public static void createUserFolder(){
         File dir = new File("./Account");
@@ -22,6 +23,7 @@ class Server{
                 String username = file.getName();
                 System.out.println(username);
                 user_list.add(username);
+                status.put(username, "offline");
             }
         }
     }
@@ -34,6 +36,10 @@ class Server{
             Socket client;
             try{
                 client = serverSocket.accept();
+                String client_address = client.getRemoteSocketAddress().toString();
+                String hostname = client_address.split(":")[0].substring(1);
+                String port = client_address.split(":")[1];
+                System.out.println("Received connection from:"+hostname+":"+port);
                 ServerThread thread = new ServerThread(client);
                 new Thread(thread).start();
             }catch(IOException e){

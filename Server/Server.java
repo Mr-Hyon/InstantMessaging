@@ -1,6 +1,12 @@
 import java.io.*;
 import java.util.*;
+
+import javax.crypto.Cipher;
+
 import java.net.*;
+import java.nio.file.*;
+import java.security.*;
+import java.security.spec.*;
 
 class Server{
 
@@ -9,6 +15,31 @@ class Server{
     public static Set<String> user_list = new HashSet<>();
     public static HashMap<String, String> status = new HashMap<>();
     public static HashMap<String, String> client_address = new HashMap<>();
+    public static HashMap<String, PublicKey> pubkey_list = new HashMap<>();
+
+    public static PublicKey getPublicKey(String username){
+        try{
+            byte[] keyBytes = Files.readAllBytes(Paths.get("./Account/"+username+"/public_key.der"));
+            X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            return kf.generatePublic(spec);
+        }catch(Exception e){
+            System.out.println("Cannot fetch public key of "+username);
+        }
+        return null;
+    }
+
+    public static byte[] encrypt(String text, PublicKey key){
+        byte[] cipherText = null;
+        try{
+            final Cipher cipher = Cipher.getInstance("RSA");
+            cipher.init(Cipher.ENCRYPT_MODE, key);
+            cipherText = cipher.doFinal(text.getBytes());
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+        return cipherText;
+    }
 
     public static void createUserFolder(){
         File dir = new File("./Account");
@@ -21,6 +52,7 @@ class Server{
         for(File file: dir.listFiles()){
             if(file.isDirectory()){
                 String username = file.getName();
+                pubkey_list.put(username, getPublicKey(username));
                 System.out.println(username);
                 user_list.add(username);
                 status.put(username, "offline");

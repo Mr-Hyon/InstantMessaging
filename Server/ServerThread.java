@@ -1,6 +1,9 @@
+import java.io.*;
 import java.util.*;
 import java.net.*;
-import java.io.*;
+import java.nio.file.*;
+import java.security.*;
+import java.security.spec.*;
 
 public class ServerThread implements Runnable {
     
@@ -53,18 +56,31 @@ public class ServerThread implements Runnable {
                 }
                 String content = input.split("\\|")[1];
                 if(content.equals("/login")){
-                    System.out.println("Received Login Request from "+username);
+                    System.out.println("Received Login Request from "+username+". verifying...");
                     // TODO : verifying credentials
-                    boolean isLegit = true;
-                    File file = new File("./Account/"+username);
-                    if(!file.exists()){
-                        file.mkdirs();
+                    PublicKey pubkey = Server.pubkey_list.getOrDefault(username, null);
+                    boolean isLegit = false;
+                    String challenge = java.util.UUID.randomUUID().toString();
+                    if(pubkey != null){
+                        byte[] encrypted_challenge = Server.encrypt(challenge, pubkey);
+                        String encoded = Base64.getEncoder().encodeToString(encrypted_challenge);
+                        out.println(encoded);
+                        String response = in.readLine();
+                        if(response!=null && response.equals(challenge)){
+                            isLegit = true;
+                            System.out.println(username+" is verified.");
+                        }
                     }
                     if(isLegit){
                         synchronized(Server.status){
                             Server.status.put(username, "idle");
                             out.println("success");
                         }
+                    }
+                    else{
+                        out.println("fail");
+                        System.out.println(username+" is not legit. Shutting down this connection.");
+                        exit = true;
                     }
                     continue;
                 }

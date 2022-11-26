@@ -1,8 +1,11 @@
 import java.net.*;
 import java.util.*;
 
-import javax.swing.text.html.HTMLDocument.HTMLReader.IsindexAction;
+import javax.crypto.Cipher;
 
+import java.nio.file.*;
+import java.security.*;
+import java.security.spec.*;
 import java.io.*;
 
 class Client{
@@ -17,6 +20,32 @@ class Client{
     public static PrintWriter out;
     public static String seperator = "|";
     public static HashMap<String, String> userInfo = new HashMap<>(); // store the ip address of online user
+    public static PrivateKey private_key;
+
+    public static PrivateKey getPrivateKey(String username){
+        try{
+            String filename = "./"+username+"/private_key.der";
+            byte[] keyBytes = Files.readAllBytes(Paths.get(filename));
+            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            return kf.generatePrivate(spec);
+        }catch(Exception e){
+            System.out.println("Please set up rsa key properly");
+        }
+        return null;
+    }
+
+    public static String RSAdecrypt(byte[] text, PrivateKey key){
+        byte[] decryptedText = null;
+        try{
+            final Cipher cipher = Cipher.getInstance("RSA");
+            cipher.init(Cipher.DECRYPT_MODE, key);
+            decryptedText = cipher.doFinal(text);
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+        return new String(decryptedText);
+    }
 
     public static void sendMessage(String msg){
         synchronized(out){
@@ -27,6 +56,10 @@ class Client{
     public static boolean sendLoginMessage(){
         try{
             out.println(username+ seperator +"/login");
+            String challenge = in.readLine();
+            byte[] decoded = Base64.getDecoder().decode(challenge.getBytes());
+            String answer = RSAdecrypt(decoded, private_key);
+            out.println(answer);
             String inMessage = in.readLine();
             System.out.println(inMessage);
             if(inMessage.equals("success")){
@@ -58,10 +91,6 @@ class Client{
         }
     }
 
-    public static void chatWithClient(){
-
-    }
-
     public static void main(String[] args){
         Scanner input_reader = new Scanner(System.in);
         System.out.println("Please enter your username:");
@@ -70,10 +99,15 @@ class Client{
             System.out.println("Illegal User Name");
             System.exit(0);
         }
-        File file = new File("./"+username);
-        if(!file.exists()){
-            file.mkdirs();
+        private_key = getPrivateKey(username);
+        if(private_key==null){
+            System.out.println("Please set up your rsa key!");
+            System.exit(0);
         }
+        // File file = new File("./"+username);
+        // if(!file.exists()){
+        //     file.mkdirs();
+        // }
         try{
             socket = new Socket("localhost", ServerPort);
             out = new PrintWriter(socket.getOutputStream(), true);
@@ -140,7 +174,7 @@ class Client{
             if(content.startsWith("/chat ")){
                 String target_name = content.split(" ")[1].trim();
                 if(target_name.equals(username)){
-                    System.out.println("Dude, stop talking to yourself");
+                    System.out.println("You cannot start a chat session with yourself");
                     continue;
                 }
                 if(chatSocket!=null){

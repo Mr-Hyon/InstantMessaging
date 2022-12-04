@@ -1,9 +1,13 @@
 import java.io.*;
 import java.util.*;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
 import java.net.*;
 import java.nio.file.*;
 import java.security.*;
-import java.security.spec.*;
 
 public class ServerThread implements Runnable {
     
@@ -31,20 +35,21 @@ public class ServerThread implements Runnable {
     }
 
     public void sendUserList(){
-        out.println("User List");
         synchronized(Server.status){
-            for(String username: Server.user_list){
-                if(Server.status.getOrDefault(username, "offline").equals("idle")){
-                    out.println(username+" "+Server.client_address.get(username));
+            for(String name: Server.user_list){
+                if(Server.status.getOrDefault(name, "offline").equals("idle")){
+                    String original_content = name+" "+Server.client_address.get(name);
+                    out.println(Server.createPayload(original_content, username));
                 }
             }
-            out.println("/over");
+            out.println(Server.createPayload("/over", username));
         }
     }
 
     @Override
     public void run(){
         boolean exit = false;
+        boolean logined = false;
         try{
         while(!exit){
                 String input = in.readLine();
@@ -56,6 +61,10 @@ public class ServerThread implements Runnable {
                 }
                 String content = input.split("\\|")[1];
                 if(content.equals("/login")){
+                    if(logined){
+                        System.out.println("Repetitive login! Illegal Operation.");
+                        break;
+                    }
                     System.out.println("Received Login Request from "+username+". verifying...");
                     // TODO : verifying credentials
                     PublicKey pubkey = Server.pubkey_list.getOrDefault(username, null);
@@ -72,33 +81,95 @@ public class ServerThread implements Runnable {
                         }
                     }
                     if(isLegit){
+                        // user is legit
                         synchronized(Server.status){
                             Server.status.put(username, "idle");
+                            Server.encoded_key_bytes.put(username, new HashMap<>());
                             out.println("success");
+                            // sending a hashkey to client
+                            String random_hashkey = java.util.UUID.randomUUID().toString();
+                            Server.hashkey.put(username, random_hashkey);
+                            byte[] key_byte = Server.generateSessionKey();
+                            Server.user_key.put(username, new SecretKeySpec(key_byte, "AES"));
+                            out.println(Base64.getEncoder().encodeToString(Server.encrypt(random_hashkey, pubkey)));
+                            out.println(Base64.getEncoder().encodeToString(Server.encrypt(Base64.getEncoder().encodeToString(key_byte), pubkey)));
+                            logined = true;
                         }
                     }
                     else{
+                        // user is not legit, end this connection
                         out.println("fail");
                         System.out.println(username+" is not legit. Shutting down this connection.");
                         exit = true;
                     }
                     continue;
                 }
-                if(content.equals("/list")){
+                /* Decrypt message and check HMAC value */
+                String encoded_encrypted_content = content.split("::")[0];
+                String hmac_received = content.split("::")[1];
+                byte[] decryptText = null;
+                try{
+                    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                    cipher.init(Cipher.DECRYPT_MODE, Server.user_key.get(username), new IvParameterSpec(new byte[16]));
+                    decryptText = cipher.doFinal(Base64.getDecoder().decode(encoded_encrypted_content.getBytes()));
+                }catch(Exception ce){
+                    ce.printStackTrace();
+                }
+                String real_content = new String(decryptText);
+                if(!Server.calculateHMAC(real_content, Server.hashkey.get(username)).equals(hmac_received)){
+                    System.out.println("hmac not matched! Malicious activity detected!");
+                    client.close();
+                    break;
+                }
+                System.out.println(username+":"+real_content+". Integrity check: HMAC matched!");
+                if(real_content.equals("/list")){
                     sendUserList();
                     continue;
                 }
-                else if(content.equals("/exit")){
+                else if(real_content.equals("/exit")){
                     exit = true;
                     System.out.println(username+" ended connection to server");
                     Server.status.put(username, "offline");
                 }
+                else if(real_content.startsWith("/startChatWith ")){
+                    String targetName = real_content.split(" ")[1];
+                    if(!Server.status.getOrDefault(username, "offline").equals("idle") || !Server.status.getOrDefault(targetName, "offline").equals("idle")){
+                        out.println(Server.createPayload("denied", username));
+                        continue;
+                    }
+                    synchronized(Server.status){
+                        synchronized(Server.encoded_key_bytes){
+                            if(Server.encoded_key_bytes.get(username).get(targetName)==null){
+                                // generate a session key
+                                byte[] session_key_byte = Server.generateSessionKey();
+                                String encoded_keybyte = Base64.getEncoder().encodeToString(session_key_byte);
+                                Server.encoded_key_bytes.get(targetName).put(username, encoded_keybyte);
+                                byte[] encrypted_content = Server.encrypt(encoded_keybyte, Server.pubkey_list.getOrDefault(username, null));
+                                out.println(Server.createPayload(Base64.getEncoder().encodeToString(encrypted_content), username));
+                            }
+                            else{
+                                // already have a session key
+                                String encoded_keybyte = Server.encoded_key_bytes.get(username).get(targetName);
+                                Server.encoded_key_bytes.get(username).put(targetName, null);
+                                byte[] encrypted_content = Server.encrypt(encoded_keybyte, Server.pubkey_list.getOrDefault(username, null));
+                                out.println(Server.createPayload(Base64.getEncoder().encodeToString(encrypted_content), username));
+                                Server.status.put(username, "busy");
+                                Server.status.put(targetName, "busy");
+                            }
+                        }
+                    }
+                }
+                else if(real_content.equals("/endChat")){
+                    synchronized(Server.status){
+                        Server.status.put(username,"idle");
+                    }
+                }
                 else{
-                    System.out.println(username+":"+content);
+                    System.out.println(username+":"+real_content);
                 }
         }
         }catch(Exception e){
-            //e.printStackTrace();
+            e.printStackTrace();
             System.out.println(username+" ended connection to server");
             Server.status.put(username, "offline");
         }finally{

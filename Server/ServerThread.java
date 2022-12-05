@@ -35,7 +35,7 @@ public class ServerThread implements Runnable {
     }
 
     public void sendUserList(){
-        synchronized(Server.status){
+        //synchronized(Server.status){
             for(String name: Server.user_list){
                 if(Server.status.getOrDefault(name, "offline").equals("idle")){
                     String original_content = name+" "+Server.client_address.get(name);
@@ -43,7 +43,7 @@ public class ServerThread implements Runnable {
                 }
             }
             out.println(Server.createPayload("/over", username));
-        }
+        //}
     }
 
     @Override
@@ -165,7 +165,7 @@ public class ServerThread implements Runnable {
                     }
                 }
                 else{
-                    System.out.println(username+":"+real_content);
+                    //System.out.println(username+":"+real_content + " [integrity check: HMAC matched]");
                 }
         }
         }catch(Exception e){

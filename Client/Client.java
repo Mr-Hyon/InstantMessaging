@@ -183,6 +183,7 @@ class Client{
                 String res;
                 try{
                     while(!(res = handleServerPayload(in.readLine())).equals("/over")){
+                        System.out.println(res);
                         if(res.contains(":")){
                             userInfo.put(res.split(" ")[0], res.split(" ")[1]);
                         }
@@ -282,6 +283,7 @@ class Client{
                         }
                     }
                 }
+                continue;
             }
             if(content.startsWith("/chat ")){
                 String target_name = content.split(" ")[1].trim();
@@ -316,6 +318,7 @@ class Client{
                                     //Client.sendMessage("/startChatWith "+initial_message);
                                     try{
                                         String request_payload = "/startChatWith "+ target_name;
+                                        Thread.sleep(200);
                                         sendMessage(request_payload);
                                         String response = handleServerPayload(in.readLine());
                                         if(response==null || response.equals("denied")){
@@ -326,6 +329,9 @@ class Client{
                                         Client.sessionKey = new SecretKeySpec(key_bytes, "AES");
                                         if(Client.sessionKey == null){
                                             System.out.println("fail to generate session key");
+                                            Client.chatSocket = null;
+                                            Client.sessionKey = null;
+                                            Client.sendMessage("/endChat");
                                         }
                                         else{
                                             System.out.println("successfully generated session key");
@@ -335,13 +341,17 @@ class Client{
                                     }catch(Exception e){
                                         e.printStackTrace();
                                         System.out.println("cannot create session key");
-                                        chatSocket = null;
+                                        Client.chatSocket = null;
+                                        Client.sessionKey = null;
+                                        Client.sendMessage("/endChat");
                                     }
                                 }
                             }
                         }catch(IOException e){
                             e.printStackTrace();
-                            chatSocket = null;
+                            Client.chatSocket = null;
+                            Client.sessionKey = null;
+                            Client.sendMessage("/endChat");
                         }
                     //}
                 }

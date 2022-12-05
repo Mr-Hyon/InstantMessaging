@@ -42,7 +42,7 @@ public class ConnectionListener implements Runnable {
                 // TODO: check if the address match with the user
                 boolean user_exist = false;
                 try{
-                    Thread.sleep(50);
+                    Thread.sleep(100);
                 }catch(Exception e){
                     e.printStackTrace();
                 }
@@ -69,6 +69,9 @@ public class ConnectionListener implements Runnable {
                                         Client.sessionKey = new SecretKeySpec(key_bytes, "AES");
                                         if(Client.sessionKey == null){
                                             System.out.println("fail to generate session key");
+                                            Client.chatSocket = null;
+                                            Client.sessionKey = null;
+                                            Client.sendMessage("/endChat");
                                         }
                                         else{
                                             System.out.println("successfully generated session key");
@@ -78,6 +81,9 @@ public class ConnectionListener implements Runnable {
                                         }
                                     }catch(Exception e){
                                         System.out.println("cannot create session key");
+                                        Client.chatSocket = null;
+                                        Client.sessionKey = null;
+                                        Client.sendMessage("/endChat");
                                     }
                                 }
                             }
@@ -88,6 +94,9 @@ public class ConnectionListener implements Runnable {
                 }
                 else{
                     System.out.println("User not exist!");
+                    Client.chatSocket = null;
+                    Client.sessionKey = null;
+                    Client.sendMessage("/endChat");
                 }
 
             }catch(IOException e){

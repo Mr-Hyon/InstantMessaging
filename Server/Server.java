@@ -17,7 +17,7 @@ class Server{
 
     public static ServerSocket serverSocket;
     public static int port=8080;
-    public static Set<String> user_list = new HashSet<>();
+    public static volatile Set<String> user_list = new HashSet<>();
     public static HashMap<String, String> status = new HashMap<>();
     public static HashMap<String, String> client_address = new HashMap<>();
     public static HashMap<String, PublicKey> pubkey_list = new HashMap<>();

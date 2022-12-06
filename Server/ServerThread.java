@@ -169,7 +169,7 @@ public class ServerThread implements Runnable {
                 }
         }
         }catch(Exception e){
-            e.printStackTrace();
+            //e.printStackTrace();
             System.out.println(username+" ended connection to server");
             Server.status.put(username, "offline");
         }finally{

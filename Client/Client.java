@@ -26,6 +26,7 @@ class Client{
     public static PublicKey public_key;
     public static SecretKey sessionKey; // for client-client communication
     public static SecretKey serverKey;  // for client-server communication
+    public static volatile int sendCounter = 0; // to use as sequence number during client-client communication
     public static String hashkey = null;
 
     /* read private key */
@@ -238,7 +239,10 @@ class Client{
                     PrintWriter chat_out = new PrintWriter(chatSocket.getOutputStream(), true);
                     byte[] cipherText = null;
                     String hmac = null;
+                    String original_content = content;
                     try{
+                        // add sequence number for freshness check
+                        content = (++sendCounter) + "::" + content;
                         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
                         cipher.init(Cipher.ENCRYPT_MODE, sessionKey, new IvParameterSpec(new byte[16]));
                         cipherText = cipher.doFinal(content.getBytes());
@@ -247,15 +251,17 @@ class Client{
                         ce.printStackTrace();
                     }
                     chat_out.println(Base64.getEncoder().encodeToString(cipherText)+"::"+hmac);
-                    if(content.equals("/end")){
+                    if(original_content.equals("/end")){
                         chat_out.close();
                         chatSocket = null;
+                        sendCounter = 0;
                     }
                 }catch(IOException e){
                     // do nothing
                 }
                 continue;
             }
+            sendCounter = 0;
             if(content.contains(seperator)){
                 System.out.println("Illegal Character!");
                 continue;

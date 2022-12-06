@@ -96,6 +96,7 @@ public class ConnectionListener implements Runnable {
                     System.out.println("User not exist!");
                     Client.chatSocket = null;
                     Client.sessionKey = null;
+                    Client.sendCounter = 0;
                     Client.sendMessage("/endChat");
                 }
 

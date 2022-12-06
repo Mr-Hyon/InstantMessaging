@@ -22,9 +22,12 @@ public class ChatSessionListener implements Runnable{
                 String opposed_username = Client.opposed_username;
                 BufferedReader in = new BufferedReader(new InputStreamReader(Client.chatSocket.getInputStream()));
                 System.out.println("-------------- Established chat session with "+opposed_username+" -------------------");
+                int received_count = 0;
                 boolean session_ended = false;
                 while(!session_ended){
                     String message = in.readLine();
+                    if(message == null) break;
+                    received_count++;
                     String hmac = message.split("::")[1];
                     message = message.split("::")[0];
                     //System.out.println(message);
@@ -44,6 +47,7 @@ public class ChatSessionListener implements Runnable{
                         if(!Client.calculateHMAC(message, Base64.getEncoder().encodeToString(Client.sessionKey.getEncoded())).equals(hmac)){
                             System.out.println("HMAC not matched!");
                             Client.chatSocket = null;
+                            Client.sendCounter = 0;
                             break;
                         }
                     }catch(Exception e){
@@ -51,12 +55,23 @@ public class ChatSessionListener implements Runnable{
                         Client.chatSocket = null;
                         break;
                     }
+                    // check sequence number to ensure freshness against replay attack
+                    String sequence_num = message.split("::")[0];
+                    message = message.substring(sequence_num.length()+2);
+                    if(Integer.parseInt(sequence_num) != received_count){
+                        System.out.println("Replay attack detected!");
+                        System.out.println("Received sequence number:"+sequence_num);
+                        System.out.println("Expected sequence number:"+received_count);
+                        Client.chatSocket = null;
+                        Client.sendCounter = 0;
+                        break;
+                    }
                     //System.out.println(message);
                     if(message.equals("/end")){
                         session_ended = true;
                     }
                     else{
-                        System.out.println("From "+opposed_username+":"+message +" [Integrity check: HMAC matched!]");
+                        System.out.println("From "+opposed_username+":"+message +" [Integrity check: HMAC matched!] sequence num:"+sequence_num);
                     }
                  }
                 System.out.println("-------------- Ended chat session -------------------");
@@ -64,6 +79,7 @@ public class ChatSessionListener implements Runnable{
                 if(Client.chatSocket!=null){
                     Client.chatSocket = null;
                     Client.isIdle = true;
+                    Client.sendCounter = 0;
                     Client.sendMessage("/endChat");
                 }
                 }catch(IOException e){
@@ -71,6 +87,7 @@ public class ChatSessionListener implements Runnable{
                     System.out.println("-------------- Ended chat session -------------------");
                     Client.chatSocket = null;
                     Client.sessionKey = null;
+                    Client.sendCounter = 0;
                     Client.sendMessage("/endChat");
                     try{
                         Thread.sleep(10);
